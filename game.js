@@ -11,6 +11,7 @@ class VSCodeGame {
         this.musicVolume = 0.3;
         this.sfxVolume = 0.5;
         this.initialized = false;
+        this.waveInterval = null; // 用于控制波次生成的间隔
         
         // 游戏配置
         this.config = {
@@ -61,7 +62,8 @@ class VSCodeGame {
                 range: 2,
                 fireRate: 1000,
                 color: '#3b82f6',
-                description: '基础攻击单位，发射调试光束'
+                description: '基础攻击单位，发射调试光束',
+                attackType: 'single' // 单体攻击
             },
             {
                 id: 'formatter',
@@ -73,7 +75,8 @@ class VSCodeGame {
                 fireRate: 1500,
                 color: '#22c55e',
                 areaEffect: true,
-                description: '范围攻击，清理格式错误'
+                description: '范围攻击，清理格式错误',
+                attackType: 'area' // 范围攻击
             },
             {
                 id: 'git',
@@ -85,7 +88,8 @@ class VSCodeGame {
                 fireRate: 2000,
                 color: '#f59e0b',
                 healAmount: 20,
-                description: '治疗和支援单位'
+                description: '治疗和支援单位',
+                attackType: 'heal' // 治疗友军
             },
             {
                 id: 'intellisense',
@@ -97,7 +101,8 @@ class VSCodeGame {
                 fireRate: 800,
                 color: '#8b5cf6',
                 slowEffect: 0.5,
-                description: '减速敌人移动速度'
+                description: '减速敌人移动速度',
+                attackType: 'slow' // 减速效果
             },
             {
                 id: 'terminal',
@@ -108,7 +113,8 @@ class VSCodeGame {
                 range: 1.5,
                 fireRate: 2000,
                 color: '#ef4444',
-                description: '高伤害但攻击速度慢'
+                description: '高伤害但攻击速度慢',
+                attackType: 'singleStrong' // 高伤害单体攻击
             },
             {
                 id: 'extension',
@@ -120,7 +126,8 @@ class VSCodeGame {
                 fireRate: 1000,
                 color: '#06b6d4',
                 buffEffect: 1.2,
-                description: '增强周围单位能力'
+                description: '增强周围单位能力',
+                attackType: 'buff' // 增益效果
             },
             {
                 id: 'codereview',
@@ -132,7 +139,8 @@ class VSCodeGame {
                 fireRate: 1200,
                 color: '#ec4899',
                 revealInvisible: true,
-                description: '揭示隐形敌人'
+                description: '揭示隐形敌人',
+                attackType: 'reveal' // 揭示隐形单位
             },
             {
                 id: 'autosave',
@@ -144,7 +152,8 @@ class VSCodeGame {
                 fireRate: 0,
                 color: '#84cc16',
                 passiveDefense: 0.8,
-                description: '被动防御，减少伤害'
+                description: '被动防御，减少伤害',
+                attackType: 'shield' // 被动防护
             }
         ];
         
@@ -341,6 +350,45 @@ class VSCodeGame {
             });
         }
         
+        // 重新开始本关注按钮
+        const restartLevelBtn = document.getElementById('restartLevelBtn');
+        if (restartLevelBtn) {
+            restartLevelBtn.addEventListener('click', () => {
+                this.hidePauseModal();
+                this.resetGame();
+                this.startGame();
+            });
+        }
+        
+        // 返回主菜单按钮
+        const quitToMenuBtn = document.getElementById('quitToMenuBtn');
+        if (quitToMenuBtn) {
+            quitToMenuBtn.addEventListener('click', () => {
+                this.hidePauseModal();
+                this.resetGame();
+                this.showStartModal();
+            });
+        }
+        
+        // 重玩本关按钮
+        const replayBtn = document.getElementById('replayBtn');
+        if (replayBtn) {
+            replayBtn.addEventListener('click', () => {
+                this.hideVictoryModal();
+                this.resetGame();
+                this.startGame();
+            });
+        }
+        
+        // 下一关按钮
+        const nextLevelBtn = document.getElementById('nextLevelBtn');
+        if (nextLevelBtn) {
+            nextLevelBtn.addEventListener('click', () => {
+                this.hideVictoryModal();
+                this.nextLevel();
+            });
+        }
+        
         // 鼠标事件
         const gameGrid = document.getElementById('gameGrid');
         if (gameGrid) {
@@ -358,7 +406,104 @@ class VSCodeGame {
     }
     
     showTutorial() {
-        alert('教程功能开发中...\\n\\n基本操作：\\n1. 点击工具栏中的工具\\n2. 点击网格中的位置部署\\n3. 点击已部署的单位升级\\n4. 按空格键暂停游戏');
+        // 移除原来的alert，直接显示教程模态框
+        // 创建更详细的教程模态框
+        const tutorialContent = `
+            <div class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50" id="tutorialModal">
+                <div class="modal p-8 max-w-3xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+                    <div class="text-center mb-6">
+                        <h2 class="text-3xl font-bold text-blue-400 mb-2 coding-font">游戏教程</h2>
+                        <p class="text-slate-400">掌握VS Code塔防游戏的核心玩法</p>
+                    </div>
+                    
+                    <div class="space-y-6">
+                        <div class="bg-slate-800 p-4 rounded-lg">
+                            <h3 class="text-xl font-bold text-green-400 mb-2">🎮 基本操作</h3>
+                            <ul class="text-slate-300 space-y-2">
+                                <li>• 点击底部工具栏中的工具来选择</li>
+                                <li>• 在游戏网格中点击来部署选中的工具</li>
+                                <li>• 点击已部署的工具来升级它们</li>
+                                <li>• 按空格键暂停/继续游戏</li>
+                                <li>• 使用数字键1-8快速选择工具</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="bg-slate-800 p-4 rounded-lg">
+                            <h3 class="text-xl font-bold text-yellow-400 mb-2">🛠️ 工具介绍</h3>
+                            <div class="grid grid-cols-2 gap-3 text-sm">
+                                <div class="flex items-center">
+                                    <span class="mr-2">🐛 调试器</span>
+                                    <span class="text-slate-400">基础攻击</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">✨ 格式化器</span>
+                                    <span class="text-slate-400">范围攻击</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">🔀 Git</span>
+                                    <span class="text-slate-400">治疗单位</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">💡 智能感知</span>
+                                    <span class="text-slate-400">减速敌人</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">⚡ 终端</span>
+                                    <span class="text-slate-400">高伤攻击</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">🔧 扩展插件</span>
+                                    <span class="text-slate-400">增强友军</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">👁️ 代码审查</span>
+                                    <span class="text-slate-400">揭示隐形单位</span>
+                                </div>
+                                <div class="flex items-center">
+                                    <span class="mr-2">💾 自动保存</span>
+                                    <span class="text-slate-400">被动防护</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-slate-800 p-4 rounded-lg">
+                            <h3 class="text-xl font-bold text-red-400 mb-2">👾 敌人类型</h3>
+                            <ul class="text-slate-300 space-y-2">
+                                <li>• ❌ 语法错误 - 基础敌人，血量较低</li>
+                                <li>• ⚠️ 运行时错误 - 移动速度快</li>
+                                <li>• 🧠 逻辑漏洞 - 血量高，需要持续攻击</li>
+                                <li>• 🔓 安全漏洞 - 可能绕过某些防御</li>
+                                <li>• 🔗 依赖冲突 - 对周围造成范围伤害</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="bg-slate-800 p-4 rounded-lg">
+                            <h3 class="text-xl font-bold text-purple-400 mb-2">💡 策略建议</h3>
+                            <ul class="text-slate-300 space-y-2">
+                                <li>• 合理分配资源，前期优先部署性价比高的单位</li>
+                                <li>• 利用不同工具的特性组合，形成有效的防线</li>
+                                <li>• 注意CPU和内存使用限制，避免超载</li>
+                                <li>• 及时升级关键单位以提高战斗力</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center mt-8">
+                        <button id="closeTutorialBtn" class="btn-primary px-6 py-3">
+                            <span class="coding-font">关闭教程</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 添加到页面
+        document.body.insertAdjacentHTML('beforeend', tutorialContent);
+        
+        // 添加关闭事件
+        document.getElementById('closeTutorialBtn').addEventListener('click', () => {
+            document.getElementById('tutorialModal').remove();
+        });
     }
     
     createGrid() {
@@ -428,7 +573,7 @@ class VSCodeGame {
         
         // 检查资源是否足够
         if (!this.canAfford(tool.cost)) {
-            this.showFloatingText('资源不足!', 'red', 2000);
+            this.showFloatingText('资源不足!', 'red', 1500);
             return;
         }
         
@@ -742,6 +887,10 @@ class VSCodeGame {
         if (this.gameState === 'playing') {
             this.gameState = 'paused';
             cancelAnimationFrame(this.gameLoop);
+            if (this.waveInterval) {
+                clearInterval(this.waveInterval);
+                this.waveInterval = null;
+            }
             this.showPauseModal();
         }
     }
@@ -750,7 +899,47 @@ class VSCodeGame {
         if (this.gameState === 'paused') {
             this.gameState = 'playing';
             this.gameLoop = requestAnimationFrame((time) => this.update(time));
+            // 重新开始波次生成
+            this.scheduleNextWave();
         }
+    }
+    
+    nextLevel() {
+        this.state.level++;
+        this.state.wave = 1;
+        this.state.maxWaves = 10 + (this.state.level - 1) * 2; // 每关增加波次
+        this.state.health = Math.min(100, this.state.health + 20); // 每关恢复一些生命值
+        this.resetLevel();
+        this.startGame();
+    }
+    
+    resetLevel() {
+        // 保留资源和分数，只重置单位和敌人
+        this.units = [];
+        this.enemies = [];
+        this.projectiles = [];
+        this.floatingTexts = [];
+        
+        // 清理网格
+        this.grid.forEach(row => {
+            row.forEach(cell => {
+                cell.occupied = false;
+                cell.unit = null;
+            });
+        });
+        
+        // 清理DOM元素
+        const unitsContainer = document.getElementById('unitsContainer');
+        const enemiesContainer = document.getElementById('enemiesContainer');
+        const projectilesContainer = document.getElementById('projectilesContainer');
+        const floatingTextsContainer = document.getElementById('floatingTextsContainer');
+        
+        if (unitsContainer) unitsContainer.innerHTML = '';
+        if (enemiesContainer) enemiesContainer.innerHTML = '';
+        if (projectilesContainer) projectilesContainer.innerHTML = '';
+        if (floatingTextsContainer) floatingTextsContainer.innerHTML = '';
+        
+        this.updateUI();
     }
     
     resetGame() {
@@ -765,6 +954,12 @@ class VSCodeGame {
             maxCpu: 100,
             maxMemory: 100
         };
+        
+        // 清理定时器
+        if (this.waveInterval) {
+            clearInterval(this.waveInterval);
+            this.waveInterval = null;
+        }
         
         // 清理游戏对象
         this.units = [];
@@ -957,9 +1152,24 @@ class VSCodeGame {
     scheduleNextWave() {
         if (this.gameState !== 'playing') return;
         
+        // 清除之前的定时器
+        if (this.waveInterval) {
+            clearInterval(this.waveInterval);
+        }
+        
+        // 设置新的定时器
+        this.waveInterval = setInterval(() => {
+            if (this.gameState === 'playing') {
+                this.spawnWave();
+            }
+        }, 10000); // 每10秒一波
+        
+        // 立即开始第一波
         setTimeout(() => {
-            this.spawnWave();
-        }, 3000); // 3秒后开始下一波
+            if (this.gameState === 'playing') {
+                this.spawnWave();
+            }
+        }, 3000); // 3秒后开始第一波
     }
     
     spawnWave() {
@@ -967,21 +1177,23 @@ class VSCodeGame {
         
         for (let i = 0; i < enemyCount; i++) {
             setTimeout(() => {
-                this.spawnEnemy();
+                if (this.gameState === 'playing') {
+                    this.spawnEnemy();
+                }
             }, i * 800); // 错开生成时间
         }
         
         this.state.wave++;
         this.updateUI();
-        
-        if (this.state.wave <= this.state.maxWaves) {
-            this.scheduleNextWave();
-        }
     }
     
     gameOver() {
         this.gameState = 'gameOver';
         cancelAnimationFrame(this.gameLoop);
+        if (this.waveInterval) {
+            clearInterval(this.waveInterval);
+            this.waveInterval = null;
+        }
         this.stopBackgroundMusic();
         this.playSound('warning', 0.7);
         
@@ -993,7 +1205,7 @@ class VSCodeGame {
         if (gameOverTitle) gameOverTitle.textContent = '游戏结束';
         if (gameOverMessage) gameOverMessage.textContent = '你的代码库被错误攻陷了！';
         if (finalScore) finalScore.textContent = this.state.score;
-        if (finalWave) finalWave.textContent = this.state.wave;
+        if (finalWave) finalWave.textContent = this.state.wave - 1;
         
         this.showGameOverModal();
     }
@@ -1001,6 +1213,10 @@ class VSCodeGame {
     victory() {
         this.gameState = 'victory';
         cancelAnimationFrame(this.gameLoop);
+        if (this.waveInterval) {
+            clearInterval(this.waveInterval);
+            this.waveInterval = null;
+        }
         
         const victoryScore = document.getElementById('victoryScore');
         const victoryTime = document.getElementById('victoryTime');
@@ -1147,6 +1363,8 @@ class DefenseUnit {
         this.fireRate = tool.fireRate;
         this.lastFireTime = 0;
         this.element = null;
+        this.slowedEnemies = new Set(); // 用于跟踪被减速的敌人
+        this.buffedUnits = new Set(); // 用于跟踪被增益的单位
     }
     
     upgrade() {
@@ -1159,6 +1377,34 @@ class DefenseUnit {
     update(deltaTime, enemies, game) {
         const currentTime = Date.now();
         
+        // 根据不同的攻击类型执行不同的逻辑
+        switch (this.tool.attackType) {
+            case 'single':
+            case 'singleStrong':
+                this.handleSingleTargetAttack(currentTime, enemies, game);
+                break;
+            case 'area':
+                this.handleAreaAttack(currentTime, enemies, game);
+                break;
+            case 'heal':
+                this.handleHealAttack(currentTime, game);
+                break;
+            case 'slow':
+                this.handleSlowAttack(currentTime, enemies, game);
+                break;
+            case 'buff':
+                this.handleBuffAttack(currentTime, game);
+                break;
+            case 'reveal':
+                this.handleRevealAttack(currentTime, enemies, game);
+                break;
+            case 'shield':
+                // 被动防护不需要主动攻击
+                break;
+        }
+    }
+    
+    handleSingleTargetAttack(currentTime, enemies, game) {
         if (currentTime - this.lastFireTime >= this.fireRate) {
             const target = this.findTarget(enemies);
             if (target) {
@@ -1166,6 +1412,60 @@ class DefenseUnit {
                 this.lastFireTime = currentTime;
             }
         }
+    }
+    
+    handleAreaAttack(currentTime, enemies, game) {
+        if (currentTime - this.lastFireTime >= this.fireRate) {
+            // 查找范围内的所有敌人
+            const targets = this.findTargetsInRange(enemies);
+            if (targets.length > 0) {
+                // 对每个目标创建投射物
+                targets.forEach(target => {
+                    game.createProjectile(this, target);
+                });
+                this.lastFireTime = currentTime;
+            }
+        }
+    }
+    
+    handleHealAttack(currentTime, game) {
+        if (currentTime - this.lastFireTime >= this.fireRate) {
+            // 查找范围内需要治疗的单位
+            const target = this.findDamagedAlly(game);
+            if (target) {
+                // 治疗单位
+                this.healAlly(target, game);
+                this.lastFireTime = currentTime;
+            }
+        }
+    }
+    
+    handleSlowAttack(currentTime, enemies, game) {
+        // 持续施加减速效果
+        const targets = this.findTargetsInRange(enemies);
+        targets.forEach(target => {
+            target.applySlowEffect(this.tool.slowEffect || 0.5);
+        });
+    }
+    
+    handleBuffAttack(currentTime, game) {
+        // 持续施加增益效果
+        const allies = this.findNearbyAllies(game);
+        allies.forEach(ally => {
+            if (ally !== this) { // 不要给自己增益
+                ally.applyBuffEffect(this.tool.buffEffect || 1.2);
+            }
+        });
+    }
+    
+    handleRevealAttack(currentTime, enemies, game) {
+        // 持续揭示隐形单位
+        enemies.forEach(enemy => {
+            if (enemy.type.special === 'invisible' || Math.random() < 0.1) {
+                // 这里应该揭示隐形单位，目前只是示例
+                enemy.reveal();
+            }
+        });
     }
     
     findTarget(enemies) {
@@ -1183,10 +1483,61 @@ class DefenseUnit {
         return closestEnemy;
     }
     
+    findTargetsInRange(enemies) {
+        return enemies.filter(enemy => {
+            const distance = this.getDistanceToEnemy(enemy);
+            return distance <= this.range * 100;
+        });
+    }
+    
+    findDamagedAlly(game) {
+        // 查找附近的受伤盟友
+        for (let row = Math.max(0, this.row - 1); row <= Math.min(game.config.gridHeight - 1, this.row + 1); row++) {
+            for (let col = Math.max(0, this.col - 1); col <= Math.min(game.config.gridWidth - 1, this.col + 1); col++) {
+                const cell = game.grid[row][col];
+                if (cell.occupied && cell.unit && cell.unit !== this && cell.unit.health < 100) {
+                    return cell.unit;
+                }
+            }
+        }
+        return null;
+    }
+    
+    findNearbyAllies(game) {
+        const allies = [];
+        // 查找附近的盟友
+        for (let row = Math.max(0, this.row - 1); row <= Math.min(game.config.gridHeight - 1, this.row + 1); row++) {
+            for (let col = Math.max(0, this.col - 1); col <= Math.min(game.config.gridWidth - 1, this.col + 1); col++) {
+                const cell = game.grid[row][col];
+                if (cell.occupied && cell.unit) {
+                    allies.push(cell.unit);
+                }
+            }
+        }
+        return allies;
+    }
+    
+    healAlly(target, game) {
+        // 创建治疗效果
+        const healAmount = this.tool.healAmount || 20;
+        target.health = Math.min(target.health + healAmount, 100); // 假设最大生命值为100
+        
+        // 显示治疗效果
+        game.showFloatingText(`+${healAmount} HP`, 'green', 1000);
+        
+        // 播放治疗音效
+        game.playSound('success', 0.4);
+    }
+    
     getDistanceToEnemy(enemy) {
         const dx = (this.col * 100 + 44) - (enemy.x + 20);
         const dy = (this.row * 100 + 50) - (enemy.y + 20);
         return Math.sqrt(dx * dx + dy * dy);
+    }
+    
+    applyBuffEffect(multiplier) {
+        // 应用增益效果（简化实现）
+        this.buffMultiplier = multiplier;
     }
 }
 
@@ -1201,13 +1552,20 @@ class EnemyUnit {
         this.health = type.health;
         this.maxHealth = type.health;
         this.speed = type.speed;
+        this.baseSpeed = type.speed; // 记录基础速度用于解除减速
         this.element = null;
         this.healthBar = null;
+        this.slowEffect = 1.0; // 减速倍数，1.0表示正常速度
     }
     
     update(deltaTime, game) {
-        // 移动敌人
-        this.x -= this.speed * (deltaTime / 16); // 基于60fps标准化
+        // 更新减速效果（逐渐恢复）
+        if (this.slowEffect < 1.0) {
+            this.slowEffect = Math.min(1.0, this.slowEffect + 0.01);
+        }
+        
+        // 移动敌人（考虑减速效果）
+        this.x -= (this.speed * this.slowEffect) * (deltaTime / 16); // 基于60fps标准化
         
         if (this.element) {
             this.element.style.left = `${this.x}px`;
@@ -1248,6 +1606,18 @@ class EnemyUnit {
                 duration: 200,
                 easing: 'easeInOutQuad'
             });
+        }
+    }
+    
+    applySlowEffect(multiplier) {
+        // 应用减速效果
+        this.slowEffect = Math.min(this.slowEffect, multiplier);
+    }
+    
+    reveal() {
+        // 揭示隐形单位（这里只是一个示例实现）
+        if (this.element) {
+            this.element.style.opacity = '1';
         }
     }
 }
