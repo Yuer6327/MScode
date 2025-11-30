@@ -1,6 +1,6 @@
 # Microsoft VS Code - 代码保卫战
 
-一个以VS Code为主题的塔防策略游戏，灵感来自植物大战僵尸。
+一个以VS Code为主题的塔防策略游戏，灵感来自植物大战僵尸。  
 Microsoft是Microsoft®的商标，若有侵权请联系作者。
 
 ## 游戏特色
