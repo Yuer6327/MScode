@@ -57,6 +57,14 @@ class VSCodeGame {
         // 工具定义
         this.tools = [
             {
+                id: 'shovel',
+                name: '铲子',
+                icon: '🧺',
+                cost: { codeQuality: 0, cpuUsage: 0, memoryUsage: 0 },
+                description: '移除已部署的工具',
+                color: '#8B4513'
+            },
+            {
                 id: 'debugger',
                 name: '调试器',
                 icon: '🐛',
@@ -1441,16 +1449,21 @@ class VSCodeGame {
             }
         }
         
-        // 数字键选择工具
+        // 数字键选择工具 (1-8对应工具栏中的8个工具)
         if (e.code >= 'Digit1' && e.code <= 'Digit8') {
+            e.preventDefault();
             const toolIndex = parseInt(e.code.slice(-1)) - 1;
-            if (this.tools[toolIndex]) {
-                this.selectTool(this.tools[toolIndex]);
+            // 注意：由于铲子不在工具栏中，所以索引需要调整
+            // 实际上工具栏是tools数组去掉铲子后的数组
+            const toolsWithoutShovel = this.tools.filter(tool => tool.id !== 'shovel');
+            if (toolsWithoutShovel[toolIndex]) {
+                this.selectTool(toolsWithoutShovel[toolIndex]);
             }
         }
         
         // 数字键0选择铲子
         if (e.code === 'Digit0') {
+            e.preventDefault();
             const shovelTool = this.tools.find(tool => tool.id === 'shovel');
             if (shovelTool) {
                 this.selectShovel();
@@ -1459,6 +1472,7 @@ class VSCodeGame {
         
         // ESC键取消选择
         if (e.code === 'Escape') {
+            e.preventDefault();
             this.selectedTool = null;
             this.updateToolCards();
         }
