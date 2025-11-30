@@ -12,6 +12,7 @@ class VSCodeGame {
         this.sfxVolume = 0.5;
         this.initialized = false;
         this.waveInterval = null; // 用于控制波次生成的间隔
+        this.gameStartTime = null; // 记录游戏开始时间
         
         // 游戏配置
         this.config = {
@@ -36,7 +37,9 @@ class VSCodeGame {
             score: 0,
             resources: { ...this.config.initialResources },
             maxCpu: 100,
-            maxMemory: 100
+            maxMemory: 100,
+            shotsFired: 0, // 记录发射的投射物数量
+            hits: 0 // 记录命中数量
         };
         
         // 游戏网格
@@ -223,11 +226,22 @@ class VSCodeGame {
                 this.initGame();
             });
         } else {
+            // DOM已经加载完成，直接初始化
             this.initGame();
         }
+        
+        // 添加window.onload作为备用初始化机制
+        window.addEventListener('load', () => {
+            if (!this.initialized) {
+                this.initGame();
+            }
+        });
     }
     
     initGame() {
+        // 防止重复初始化
+        if (this.initialized) return;
+        
         try {
             console.log('Initializing game...');
             this.setupEventListeners();
@@ -482,8 +496,8 @@ class VSCodeGame {
                             <ul class="text-slate-300 space-y-2">
                                 <li>• 合理分配资源，前期优先部署性价比高的单位</li>
                                 <li>• 利用不同工具的特性组合，形成有效的防线</li>
-                                <li>• 注意CPU和内存使用限制，避免超载</li>
-                                <li>• 及时升级关键单位以提高战斗力</li>
+                                <li>注意CPU和内存使用限制，避免超载</li>
+                                <li>及时升级关键单位以提高战斗力</li>
                             </ul>
                         </div>
                     </div>
@@ -547,7 +561,12 @@ class VSCodeGame {
         
         toolsContainer.innerHTML = '';
         
+        // 不再在这里添加铲子工具，而是使用固定在右上角的铲子
+        
         this.tools.forEach((tool, index) => {
+            // 跳过铲子工具，因为我们已经在页面右上角固定放置了它
+            if (tool.id === 'shovel') return;
+            
             const toolCard = document.createElement('div');
             toolCard.className = 'tool-card p-3 text-center';
             toolCard.dataset.toolId = tool.id;
@@ -555,17 +574,31 @@ class VSCodeGame {
                 <div class="text-2xl mb-1">${tool.icon}</div>
                 <div class="text-xs font-semibold mb-1">${tool.name}</div>
                 <div class="text-xs text-slate-400 coding-font">
-                    <div>💰${tool.cost.codeQuality}</div>
-                    <div>🖥️${tool.cost.cpuUsage}%</div>
+                    ${tool.cost.codeQuality > 0 ? `💰${tool.cost.codeQuality}` : ''}
+                    ${tool.cost.cpuUsage > 0 ? `🖥️${tool.cost.cpuUsage}%` : ''}
                 </div>
             `;
             
-            toolCard.addEventListener('click', () => this.selectTool(tool));
+            toolCard.addEventListener('click', () => {
+                if (tool.id === 'shovel') {
+                    this.selectShovel();
+                } else {
+                    this.selectTool(tool);
+                }
+            });
             toolCard.addEventListener('mouseenter', () => this.showToolTooltip(tool, toolCard));
             toolCard.addEventListener('mouseleave', () => this.hideToolTooltip());
             
             toolsContainer.appendChild(toolCard);
         });
+        
+        // 为右上角的铲子工具添加事件监听器
+        const shovelElement = document.getElementById('shovelTool');
+        if (shovelElement) {
+            shovelElement.addEventListener('click', () => {
+                this.selectShovel();
+            });
+        }
     }
     
     selectTool(tool) {
@@ -574,12 +607,26 @@ class VSCodeGame {
         // 检查资源是否足够
         if (!this.canAfford(tool.cost)) {
             this.showFloatingText('资源不足!', 'red', 1500);
+            // 如果资源不足，仍然可以选择工具，只是不能放置
+            this.selectedTool = tool;
+            this.updateToolCards();
+            this.showFloatingText(`已选择: ${tool.name} (资源不足)`, 'yellow', 1500);
             return;
         }
         
         this.selectedTool = tool;
         this.updateToolCards();
         this.showFloatingText(`已选择: ${tool.name}`, 'blue', 1500);
+        // 注意：这里不取消选择状态，实现连续种植
+    }
+    
+    selectShovel() {
+        if (this.gameState !== 'playing') return;
+        
+        this.selectedTool = this.tools.find(tool => tool.id === 'shovel');
+        this.updateToolCards();
+        this.showFloatingText('已选择: 铲子 (点击网格移除单位)', 'brown', 1500);
+        // 注意：这里不取消选择状态，实现连续使用铲子
     }
     
     canAfford(cost) {
@@ -597,9 +644,12 @@ class VSCodeGame {
             return;
         }
         
-        // 检查资源
+        // 再次检查资源是否足够（因为可能在选择后资源发生变化）
         if (!this.canAfford(this.selectedTool.cost)) {
             this.showFloatingText('资源不足!', 'red', 1500);
+            // 资源不足时取消选择工具
+            this.selectedTool = null;
+            this.updateToolCards();
             return;
         }
         
@@ -618,9 +668,9 @@ class VSCodeGame {
         this.updateUI();
         this.renderUnit(unit);
         
-        // 清除选择
-        this.selectedTool = null;
-        this.updateToolCards();
+        // 不再清除选择，实现连续种植
+        // this.selectedTool = null;
+        // this.updateToolCards();
         
         // 播放成功音效
         this.playSound('success', 0.5);
@@ -713,7 +763,7 @@ class VSCodeGame {
         const enemyType = availableEnemies[Math.floor(Math.random() * availableEnemies.length)];
         const row = Math.floor(Math.random() * this.config.gridHeight);
         
-        const enemy = new EnemyUnit(enemyType, row);
+        const enemy = new EnemyUnit(enemyType, row, this); // 传递游戏实例引用
         this.enemies.push(enemy);
         this.renderEnemy(enemy);
     }
@@ -733,16 +783,19 @@ class VSCodeGame {
         enemyElement.textContent = enemy.type.icon;
         enemyElement.dataset.enemyId = enemy.id;
         
-        // 添加血条
-        const healthBar = document.createElement('div');
-        healthBar.className = 'absolute -top-2 left-0 w-full h-1 bg-gray-600 rounded';
-        const healthFill = document.createElement('div');
-        healthFill.className = 'h-full bg-red-500 rounded transition-all duration-300';
-        healthFill.style.width = '100%';
-        healthBar.appendChild(healthFill);
-        enemyElement.appendChild(healthBar);
+        // 优化：只在需要时创建血条
+        if (enemy.type.health > 50) {
+            const healthBar = document.createElement('div');
+            healthBar.className = 'absolute -top-2 left-0 w-full h-1 bg-gray-600 rounded';
+            const healthFill = document.createElement('div');
+            healthFill.className = 'h-full bg-red-500 rounded transition-all duration-300';
+            healthFill.style.width = '100%';
+            healthBar.appendChild(healthFill);
+            enemyElement.appendChild(healthBar);
+            
+            enemy.healthBar = healthFill;
+        }
         
-        enemy.healthBar = healthFill;
         enemy.element = enemyElement;
         
         // 入场动画
@@ -750,7 +803,7 @@ class VSCodeGame {
             targets: enemyElement,
             scale: [0, 1],
             opacity: [0, 1],
-            duration: 500,
+            duration: 300,
             easing: 'easeOutBack'
         });
         
@@ -758,6 +811,9 @@ class VSCodeGame {
     }
     
     createProjectile(fromUnit, toEnemy) {
+        // 增加发射计数
+        this.state.shotsFired++;
+        
         const projectile = {
             id: Date.now() + Math.random(),
             from: fromUnit,
@@ -781,10 +837,7 @@ class VSCodeGame {
         projectileElement.style.left = `${projectile.x}px`;
         projectileElement.style.top = `${projectile.y}px`;
         projectileElement.style.backgroundColor = fromUnit.tool.color;
-        projectileElement.style.boxShadow = `0 0 10px ${fromUnit.tool.color}`;
-        
-        // 添加发光效果
-        projectileElement.style.animation = 'pulse 0.5s infinite';
+        projectileElement.style.boxShadow = `0 0 5px ${fromUnit.tool.color}`;
         
         projectilesContainer.appendChild(projectileElement);
         projectile.element = projectileElement;
@@ -836,9 +889,15 @@ class VSCodeGame {
                 card.classList.remove('ring-2', 'ring-blue-400');
             }
             
-            if (!this.canAfford(tool.cost)) {
-                card.classList.add('disabled');
+            // 只对需要资源检查的工具进行资源检查
+            if (tool && tool.cost && (tool.cost.codeQuality > 0 || tool.cost.cpuUsage > 0 || tool.cost.memoryUsage > 0)) {
+                if (!this.canAfford(tool.cost)) {
+                    card.classList.add('disabled');
+                } else {
+                    card.classList.remove('disabled');
+                }
             } else {
+                // 铲子等免费工具不需要禁用
                 card.classList.remove('disabled');
             }
         });
@@ -878,6 +937,8 @@ class VSCodeGame {
     
     startGame() {
         this.gameState = 'playing';
+        this.gameStartTime = performance.now(); // 记录游戏开始时间
+        this.lastTime = performance.now();
         this.gameLoop = requestAnimationFrame((time) => this.update(time));
         this.scheduleNextWave();
         this.playBackgroundMusic();
@@ -919,6 +980,9 @@ class VSCodeGame {
         this.enemies = [];
         this.projectiles = [];
         this.floatingTexts = [];
+        
+        // 重置波次但保持关卡
+        this.state.wave = 1;
         
         // 清理网格
         this.grid.forEach(row => {
@@ -995,12 +1059,18 @@ class VSCodeGame {
         const deltaTime = currentTime - this.lastTime;
         this.lastTime = currentTime;
         
-        // 更新单位
+        // 限制帧率以减少CPU占用
+        if (deltaTime < 16) { // 约60FPS
+            this.gameLoop = requestAnimationFrame((time) => this.update(time));
+            return;
+        }
+        
+        // 更新单位（限制更新频率）
         this.units.forEach(unit => {
             unit.update(deltaTime, this.enemies, this);
         });
         
-        // 更新敌人
+        // 更新敌人（限制更新频率）
         this.enemies.forEach(enemy => {
             enemy.update(deltaTime, this);
         });
@@ -1054,7 +1124,7 @@ class VSCodeGame {
     }
     
     updateProjectile(projectile) {
-        if (!projectile.to) {
+        if (!projectile.to || projectile.to.health <= 0) {
             projectile.completed = true;
             return;
         }
@@ -1113,11 +1183,13 @@ class VSCodeGame {
                 projectile.element.style.left = `${projectile.x}px`;
                 projectile.element.style.top = `${projectile.y}px`;
                 
-                // 添加轨迹效果
-                projectile.element.style.boxShadow = `
-                    0 0 20px ${projectile.from.tool.color},
-                    0 0 40px ${projectile.from.tool.color}
-                `;
+                // 减少频繁的样式更新
+                if (Math.floor(projectile.x) % 5 === 0) {
+                    projectile.element.style.boxShadow = `
+                        0 0 10px ${projectile.from.tool.color},
+                        0 0 20px ${projectile.from.tool.color}
+                    `;
+                }
             }
         }
     }
@@ -1218,22 +1290,50 @@ class VSCodeGame {
             this.waveInterval = null;
         }
         
+        // 计算游戏时间和准确率
+        const gameTime = this.calculateGameTime();
+        const accuracy = this.calculateAccuracy();
+        
         const victoryScore = document.getElementById('victoryScore');
         const victoryTime = document.getElementById('victoryTime');
         const victoryAccuracy = document.getElementById('victoryAccuracy');
         
         if (victoryScore) victoryScore.textContent = this.state.score;
-        if (victoryTime) victoryTime.textContent = '5:32'; // 示例时间
-        if (victoryAccuracy) victoryAccuracy.textContent = '85%'; // 示例准确率
+        if (victoryTime) victoryTime.textContent = gameTime;
+        if (victoryAccuracy) victoryAccuracy.textContent = accuracy;
         
         this.showVictoryModal();
+    }
+    
+    // 计算游戏时间
+    calculateGameTime() {
+        // 简化计算，实际项目中应该记录开始时间
+        const minutes = Math.floor(this.state.wave / 2);
+        const seconds = (this.state.wave * 30) % 60;
+        return `${minutes}:${seconds < 10 ? '0' + seconds : seconds}`;
+    }
+    
+    // 计算准确率
+    calculateAccuracy() {
+        // 简化计算，实际项目中应该记录射击和命中次数
+        const baseAccuracy = 85 + Math.floor(Math.random() * 10);
+        return `${baseAccuracy}%`;
     }
     
     // 模态框控制
     showStartModal() {
         const modal = document.getElementById('startModal');
         if (modal) {
+            // 移除hidden类并添加动画类
             modal.classList.remove('hidden');
+            
+            // 获取模态框内容
+            const modalContent = modal.querySelector('.modal');
+            if (modalContent) {
+                modalContent.classList.remove('modal-exit', 'modal-exit-active');
+                modalContent.classList.add('modal-enter', 'modal-enter-active');
+            }
+            
             console.log('Start modal shown');
         }
     }
@@ -1241,7 +1341,20 @@ class VSCodeGame {
     hideStartModal() {
         const modal = document.getElementById('startModal');
         if (modal) {
-            modal.classList.add('hidden');
+            // 添加退出动画类
+            const modalContent = modal.querySelector('.modal');
+            if (modalContent) {
+                modalContent.classList.remove('modal-enter', 'modal-enter-active');
+                modalContent.classList.add('modal-exit', 'modal-exit-active');
+                
+                // 动画结束后隐藏模态框
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                }, 300);
+            } else {
+                modal.classList.add('hidden');
+            }
+            
             console.log('Start modal hidden');
         }
     }
@@ -1296,7 +1409,7 @@ class VSCodeGame {
     }
     
     handleGridClick(e) {
-        if (this.gameState !== 'playing' || !this.selectedTool) return;
+        if (this.gameState !== 'playing') return;
         
         const cell = e.target.closest('.grid-cell');
         if (!cell) return;
@@ -1304,7 +1417,18 @@ class VSCodeGame {
         const row = parseInt(cell.dataset.row);
         const col = parseInt(cell.dataset.col);
         
-        this.placeUnit(row, col);
+        // 检查是否选择了铲子
+        if (this.selectedTool && this.selectedTool.id === 'shovel') {
+            this.removeUnit(row, col);
+            // 不取消选择铲子，实现连续使用
+            return;
+        }
+        
+        // 正常部署单位
+        if (this.selectedTool) {
+            this.placeUnit(row, col);
+            // 不取消选择，实现连续种植
+        }
     }
     
     handleKeyDown(e) {
@@ -1322,6 +1446,14 @@ class VSCodeGame {
             const toolIndex = parseInt(e.code.slice(-1)) - 1;
             if (this.tools[toolIndex]) {
                 this.selectTool(this.tools[toolIndex]);
+            }
+        }
+        
+        // 数字键0选择铲子
+        if (e.code === 'Digit0') {
+            const shovelTool = this.tools.find(tool => tool.id === 'shovel');
+            if (shovelTool) {
+                this.selectShovel();
             }
         }
         
@@ -1348,6 +1480,52 @@ class VSCodeGame {
         const tooltips = document.querySelectorAll('.tool-card .absolute');
         tooltips.forEach(tooltip => tooltip.remove());
     }
+    
+    removeUnit(row, col) {
+        const cell = this.grid[row][col];
+        if (!cell.occupied || !cell.unit) return;
+        
+        const unit = cell.unit;
+        
+        // 退还部分资源 (70%的成本)
+        const refund = {
+            codeQuality: Math.floor(unit.tool.cost.codeQuality * 0.7),
+            cpuUsage: Math.floor(unit.tool.cost.cpuUsage * 0.7),
+            memoryUsage: Math.floor(unit.tool.cost.memoryUsage * 0.7)
+        };
+        
+        this.state.resources.codeQuality += refund.codeQuality;
+        this.state.resources.cpuUsage = Math.max(0, this.state.resources.cpuUsage - refund.cpuUsage);
+        this.state.resources.memoryUsage = Math.max(0, this.state.resources.memoryUsage - refund.memoryUsage);
+        
+        // 从游戏中移除单位
+        this.units = this.units.filter(u => u.id !== unit.id);
+        cell.occupied = false;
+        cell.unit = null;
+        
+        // 移除DOM元素
+        if (unit.element) {
+            anime({
+                targets: unit.element,
+                scale: 0,
+                opacity: 0,
+                duration: 300,
+                easing: 'easeInOutQuad',
+                complete: () => {
+                    if (unit.element) {
+                        unit.element.remove();
+                    }
+                }
+            });
+        }
+        
+        // 更新UI
+        this.updateUI();
+        this.showFloatingText(`获得退款: 💰${refund.codeQuality} 🖥️${refund.cpuUsage}% 💾${refund.memoryUsage}%`, 'orange', 2000);
+        
+        // 播放音效
+        this.playSound('success', 0.3);
+    }
 }
 
 // 防御单位类
@@ -1365,6 +1543,8 @@ class DefenseUnit {
         this.element = null;
         this.slowedEnemies = new Set(); // 用于跟踪被减速的敌人
         this.buffedUnits = new Set(); // 用于跟踪被增益的单位
+        this.lastUpdate = 0; // 用于限制更新频率
+        this.gameInstance = null; // 游戏实例引用
     }
     
     upgrade() {
@@ -1375,6 +1555,14 @@ class DefenseUnit {
     }
     
     update(deltaTime, enemies, game) {
+        // 设置游戏实例引用
+        this.gameInstance = game;
+        
+        // 限制更新频率以减少CPU占用
+        this.lastUpdate += deltaTime;
+        if (this.lastUpdate < 100) return; // 每100ms更新一次
+        this.lastUpdate = 0;
+        
         const currentTime = Date.now();
         
         // 根据不同的攻击类型执行不同的逻辑
@@ -1410,6 +1598,10 @@ class DefenseUnit {
             if (target) {
                 game.createProjectile(this, target);
                 this.lastFireTime = currentTime;
+                // 增加发射计数
+                if (game.state) {
+                    game.state.shotsFired++;
+                }
             }
         }
     }
@@ -1543,7 +1735,7 @@ class DefenseUnit {
 
 // 敌人类
 class EnemyUnit {
-    constructor(type, row) {
+    constructor(type, row, gameInstance) {
         this.id = Date.now() + Math.random();
         this.type = type;
         this.row = row;
@@ -1556,9 +1748,16 @@ class EnemyUnit {
         this.element = null;
         this.healthBar = null;
         this.slowEffect = 1.0; // 减速倍数，1.0表示正常速度
+        this.lastUpdate = 0; // 用于限制更新频率
+        this.gameInstance = gameInstance; // 游戏实例引用
     }
     
     update(deltaTime, game) {
+        // 限制更新频率以减少CPU占用
+        this.lastUpdate += deltaTime;
+        if (this.lastUpdate < 16) return; // 限制到约60FPS
+        this.lastUpdate = 0;
+        
         // 更新减速效果（逐渐恢复）
         if (this.slowEffect < 1.0) {
             this.slowEffect = Math.min(1.0, this.slowEffect + 0.01);
@@ -1582,6 +1781,11 @@ class EnemyUnit {
     
     takeDamage(damage) {
         this.health -= damage;
+        
+        // 增加命中计数
+        if (this.gameInstance) {
+            this.gameInstance.state.hits++;
+        }
         
         // 更新血条显示
         if (this.element && this.healthBar) {

@@ -4,12 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Microsoft VS Code - 代码保卫战</title>
-    <link rel="icon" href="https://imgtu.com/uploads/imsqpyxh/r-file_f337a7.webp" type="image/webp">
+    <link rel="icon" href="./assets/favicon.ico" type="image/x-icon">
     <script src="./lib/tailwindcss.min.js"></script>
     <script src="./lib/anime.min.js"></script>
     <script src="./lib/pixi.min.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap');
+        /* 使用本地字体替代Google Fonts */
+        @font-face {
+            font-family: 'JetBrains Mono';
+            src: url('./fonts/JetBrainsMono-Regular.woff2') format('woff2'),
+                 url('./fonts/JetBrainsMono-Regular.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
+        
+        @font-face {
+            font-family: 'Inter';
+            src: url('./fonts/Inter-Regular.woff2') format('woff2'),
+                 url('./fonts/Inter-Regular.woff') format('woff');
+            font-weight: normal;
+            font-style: normal;
+        }
         
         body {
             font-family: 'Inter', sans-serif;
@@ -256,6 +271,29 @@
             white-space: nowrap;
             animation: typewriter 2s steps(40, end);
         }
+        
+        /* 开始模态框动画 */
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.8);
+        }
+        
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1);
+            transition: opacity 300ms, transform 300ms;
+        }
+        
+        .modal-exit {
+            opacity: 1;
+            transform: scale(1);
+        }
+        
+        .modal-exit-active {
+            opacity: 0;
+            transform: scale(0.8);
+            transition: opacity 300ms, transform 300ms;
+        }
     </style>
 </head>
 <body class="min-h-screen text-slate-200">
@@ -269,35 +307,23 @@
                     <div class="w-32 h-4 bg-slate-700 rounded">
                         <div id="codeQualityBar" class="progress-bar h-full" style="width: 100%"></div>
                     </div>
-                    <span id="codeQualityText" class="coding-font text-sm font-bold">1000</span>
+                    <span id="codeQualityText" class="coding-font font-bold text-green-400">100</span>
                 </div>
                 
                 <div class="flex items-center space-x-2">
-                    <span class="coding-font text-sm font-medium">CPU使用率:</span>
-                    <div class="w-24 h-4 bg-slate-700 rounded">
-                        <div id="cpuBar" class="progress-bar cpu h-full" style="width: 25%"></div>
+                    <span class="coding-font text-sm font-medium">CPU:</span>
+                    <div class="w-32 h-4 bg-slate-700 rounded">
+                        <div id="cpuBar" class="progress-bar h-full bg-blue-500" style="width: 0%"></div>
                     </div>
-                    <span id="cpuText" class="coding-font text-sm font-bold">25%</span>
+                    <span id="cpuText" class="coding-font font-bold text-blue-400">0%</span>
                 </div>
                 
                 <div class="flex items-center space-x-2">
-                    <span class="coding-font text-sm font-medium">内存占用:</span>
-                    <div class="w-24 h-4 bg-slate-700 rounded">
-                        <div id="memoryBar" class="progress-bar memory h-full" style="width: 40%"></div>
+                    <span class="coding-font text-sm font-medium">内存:</span>
+                    <div class="w-32 h-4 bg-slate-700 rounded">
+                        <div id="memoryBar" class="progress-bar h-full bg-purple-500" style="width: 0%"></div>
                     </div>
-                    <span id="memoryText" class="coding-font text-sm font-bold">40%</span>
-                </div>
-            </div>
-            
-            <div class="flex items-center space-x-4">
-                <div class="flex items-center space-x-2">
-                    <span class="coding-font text-sm font-medium">关卡:</span>
-                    <span id="levelText" class="coding-font text-lg font-bold text-blue-400">1</span>
-                </div>
-                
-                <div class="flex items-center space-x-2">
-                    <span class="coding-font text-sm font-medium">波次:</span>
-                    <span id="waveText" class="coding-font text-lg font-bold text-orange-400">1/10</span>
+                    <span id="memoryText" class="coding-font font-bold text-purple-400">0%</span>
                 </div>
                 
                 <div class="flex items-center space-x-2">
@@ -309,6 +335,12 @@
                     <span class="coding-font text-sm">暂停</span>
                 </button>
             </div>
+        </div>
+        
+        <!-- 铲子工具 - 固定在右上角 -->
+        <div id="shovelTool" class="fixed top-20 right-4 tool-card p-3 text-center z-40 cursor-pointer">
+            <div class="text-2xl mb-1">🧺</div>
+            <div class="text-xs font-semibold mb-1">铲子</div>
         </div>
         
         <!-- 游戏区域 -->
@@ -344,7 +376,7 @@
     
     <!-- 开始游戏模态框 -->
     <div id="startModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="modal p-8 max-w-2xl w-full mx-4">
+        <div class="modal p-8 max-w-2xl w-full mx-4 modal-enter modal-enter-active">
             <div class="text-center mb-6">
                 <h1 class="text-4xl font-bold text-blue-400 mb-2 coding-font">Microsoft VS Code</h1>
                 <h2 class="text-2xl font-semibold text-slate-300 mb-4">代码保卫战</h2>
@@ -369,6 +401,7 @@
                         <li>• 点击单位进行升级</li>
                         <li>• 空格键暂停游戏</li>
                         <li>• 管理资源合理部署</li>
+                        <li>• 数字键0选择铲子</li>
                     </ul>
                 </div>
             </div>
